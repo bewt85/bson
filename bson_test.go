@@ -2,6 +2,7 @@ package bson
 
 import (
 	"bytes"
+	"io"
 	"reflect"
 	"testing"
 )
@@ -99,7 +100,25 @@ var decoderDecodeTests = []struct {
 	data     []byte
 	expected interface{}
 	err      error
-}{}
+}{{
+	data: []byte{},
+	err:  io.EOF,
+}, {
+	data: []byte{0x01},
+	err:  io.ErrUnexpectedEOF,
+}, {
+	data: []byte{0x05, 0x0, 0x0, 0x0},
+	err:  io.ErrUnexpectedEOF,
+}, {
+	data: []byte{0x04, 0x0, 0x0, 0x0},
+	err:  ErrTooShort,
+}, {
+	data: []byte{0x04, 0x0, 0x0, 0x0, 0x0},
+	err:  ErrTooShort,
+}, {
+	data: []byte{0x05, 0x0, 0x0, 0x0, 0x0},
+	err:  nil,
+}}
 
 func TestDecoderDecode(t *testing.T) {
 	for _, tt := range decoderDecodeTests {

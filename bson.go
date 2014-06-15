@@ -4,8 +4,14 @@
 package bson
 
 import (
+	"bytes"
+	"encoding/binary"
+	"errors"
 	"io"
+	"unsafe"
 )
+
+var ErrTooShort = errors.New("bson document too short")
 
 // Marshal returns the BSON encoding of v.
 //
@@ -48,7 +54,24 @@ func NewDecoder(r io.Reader) *Decoder {
 // See the documentation for Unmarshal for details about the conversion of
 // BSON into a Go value.
 func (d *Decoder) Decode(v interface{}) error {
-	return nil
+	var doclen int32
+	if err := binary.Read(d.r, binary.LittleEndian, &doclen); err != nil {
+		return err
+	}
+	doclen -= int32(unsafe.Sizeof(doclen))
+	if doclen < 1 {
+		return ErrTooShort
+	}
+	r := io.LimitReader(d.r, int64(doclen))
+	var buf bytes.Buffer
+	n, err := io.Copy(&buf, r)
+	if err != nil {
+		return err
+	}
+	if n != int64(doclen) {
+		return io.ErrUnexpectedEOF
+	}
+	return Unmarshal(buf.Bytes(), v)
 }
 
 // An Encoder writes BSON objects to an output stream.
