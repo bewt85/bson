@@ -131,15 +131,15 @@ var decodeTests = []struct {
 	}},
 }}
 
-func TestBsonIter(t *testing.T) {
+func TestReader(t *testing.T) {
 	for _, tt := range decodeTests {
-		iter := bsonIter{bson: tt.bson[4 : len(tt.bson)-1]}
+		r := reader{bson: tt.bson[4 : len(tt.bson)-1]}
 		got := make([]element, 0)
-		for iter.Next() {
-			typ, ename, value := iter.Element()
+		for r.Next() {
+			typ, ename, value := r.Element()
 			got = append(got, element{typ, ename, value})
 		}
-		err := iter.Err()
+		err := r.Err()
 		if !reflect.DeepEqual(err, tt.err) {
 			t.Errorf("bsonIter %v: expected err %v, got %v", tt.bson, tt.err, err)
 			continue

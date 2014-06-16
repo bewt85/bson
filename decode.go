@@ -45,7 +45,7 @@ func decode(data []byte, v interface{}) error {
 }
 
 func decodeStruct(data []byte, v reflect.Value) error {
-	iter := bsonIter{bson: data[4 : len(data)-1]}
+	iter := reader{bson: data[4 : len(data)-1]}
 	for iter.Next() {
 
 	}
@@ -53,7 +53,7 @@ func decodeStruct(data []byte, v reflect.Value) error {
 }
 
 func decodeMap(data []byte, v reflect.Value) error {
-	iter := bsonIter{bson: data[4 : len(data)-1]}
+	iter := reader{bson: data[4 : len(data)-1]}
 	for iter.Next() {
 		typ, _, _ := iter.Element()
 		switch typ {
@@ -66,9 +66,9 @@ func decodeMap(data []byte, v reflect.Value) error {
 	return iter.Err()
 }
 
-// bsonIter is an interator over a BSON document.
-type bsonIter struct {
-	// source bson document, mutated during iteration
+// reader is an iterator over a BSON document.
+type reader struct {
+	// source bson document, mutated during read.
 	bson []byte
 
 	// ename of the next element, ename[0] contains the
@@ -84,48 +84,48 @@ type bsonIter struct {
 	err error
 }
 
-// Next advances the iterator to the next element in BSON document.
+// Next advances the reader to the next element in BSON document.
 // The element is available via the Element method. It returns false
 // when the end of the document is reached, or an error occurs.
 // After Next() returns false, the Err method will return any error
 // that occured during walking the document.
-func (b *bsonIter) Next() bool {
-	switch len(b.bson) {
+func (r *reader) Next() bool {
+	switch len(r.bson) {
 	case 0:
 		// we've read everything
 		return false
 	case 1:
 		// error, there must be at least 2 bytes remaining to be
 		// valid BSON
-		b.err = errors.New("corrupt BSON, only 1 byte remains")
+		r.err = errors.New("corrupt BSON, only 1 byte remains")
 		return false
 	}
-	i := bytes.IndexByte(b.bson[1:], 0)
+	i := bytes.IndexByte(r.bson[1:], 0)
 	if i < 0 {
-		b.err = errors.New("corrupt BSON ename")
+		r.err = errors.New("corrupt BSON ename")
 		return false
 	}
 	i += 2
-	ename, rest := b.bson[:i], b.bson[i:]
+	ename, rest := r.bson[:i], r.bson[i:]
 	var element []byte
 	switch typ := ename[0]; typ {
 	case 0x01:
 		// double
 		if len(rest) < 8 {
-			b.err = errors.New("corrupt BSON reading double")
+			r.err = errors.New("corrupt BSON reading double")
 			return false
 		}
 		element, rest = rest[:8], rest[8:]
 	case 0x02:
 		// UTF-8 string
 		if len(rest) < 5 {
-			b.err = errors.New("corrupt BSON reading utf8 string len")
+			r.err = errors.New("corrupt BSON reading utf8 string len")
 			return false
 		}
 		var elen int
 		elen, rest = readInt32(rest)
 		if len(rest) < elen {
-			b.err = errors.New("corrupt BSON reading utf8 string")
+			r.err = errors.New("corrupt BSON reading utf8 string")
 			return false
 		}
 		element = rest[:elen]
@@ -138,7 +138,7 @@ func (b *bsonIter) Next() bool {
 		var elen int
 		elen, _ = readInt32(rest)
 		if len(rest) < elen {
-			b.err = fmt.Errorf("corrupt document: want %x bytes, have %x", elen, len(rest))
+			r.err = fmt.Errorf("corrupt document: want %x bytes, have %x", elen, len(rest))
 			return false
 		}
 		element = rest[:elen]
@@ -147,7 +147,7 @@ func (b *bsonIter) Next() bool {
 		// UTC datetime
 		// int64
 		if len(rest) < 8 {
-			b.err = errors.New("corrupt BSON reading utc datetime")
+			r.err = errors.New("corrupt BSON reading utc datetime")
 			return false
 		}
 		element, rest = rest[:8], rest[8:]
@@ -157,18 +157,18 @@ func (b *bsonIter) Next() bool {
 		// regex
 		if len(rest) < 2 {
 			// need at least two bytes for empty cstrings
-			b.err = errors.New("corrupt BSON reading regex")
+			r.err = errors.New("corrupt BSON reading regex")
 			return false
 		}
 		i := bytes.IndexByte(rest, 0)
 		if i < 0 {
-			b.err = errors.New("corrupt BSON regex 1")
+			r.err = errors.New("corrupt BSON regex 1")
 			return false
 		}
 		i++
 		j := bytes.IndexByte(rest[i+1:], 0)
 		if j < 0 {
-			b.err = errors.New("corrupt BSON regex 2")
+			r.err = errors.New("corrupt BSON regex 2")
 			return false
 		}
 		j++
@@ -176,33 +176,33 @@ func (b *bsonIter) Next() bool {
 	case 0x10:
 		// int32
 		if len(rest) < 4 {
-			b.err = errors.New("corrupt BSON reading int32")
+			r.err = errors.New("corrupt BSON reading int32")
 			return false
 		}
 		element, rest = rest[:4], rest[4:]
 	case 0x12:
 		// int64
 		if len(rest) < 8 {
-			b.err = errors.New("corrupt BSON reading int64")
+			r.err = errors.New("corrupt BSON reading int64")
 			return false
 		}
 		element, rest = rest[:8], rest[8:]
 	default:
-		b.err = &InvalidBSONTypeError{typ}
+		r.err = &InvalidBSONTypeError{typ}
 		return false
 	}
-	b.bson, b.ename, b.element = rest, ename, element
+	r.bson, r.ename, r.element = rest, ename, element
 	return true
 }
 
-// Err returns the first error that was encountered during iteration.
-func (b *bsonIter) Err() error {
-	return b.err
+// Err returns the first error that was encountered.
+func (r *reader) Err() error {
+	return r.err
 }
 
-// Element returns the most recent element verified by a call to Next.
-func (b *bsonIter) Element() (byte, []byte, []byte) {
-	return b.ename[0], b.ename[1:], b.element
+// Element returns the most recent element read by a call to Next.
+func (r *reader) Element() (byte, []byte, []byte) {
+	return r.ename[0], r.ename[1:], r.element
 }
 
 // An InvalidBSONTypeError describes an unhandled BSON document element type.
