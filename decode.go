@@ -36,10 +36,8 @@ func decode(data []byte, v interface{}) error {
 	}
 	switch rv := rv.Elem(); rv.Kind() {
 	case reflect.Struct:
-		buf := buf[:len(buf)-1]
 		return decodeStruct(buf, rv)
 	case reflect.Map:
-		buf := buf[:len(buf)-1]
 		return decodeMap(buf, rv)
 	default:
 		return &InvalidUnmarshalError{rv.Type()}
@@ -47,11 +45,25 @@ func decode(data []byte, v interface{}) error {
 }
 
 func decodeStruct(data []byte, v reflect.Value) error {
-	return nil
+	iter := bsonIter{bson: data[4 : len(data)-1]}
+	for iter.Next() {
+
+	}
+	return iter.Err()
 }
 
 func decodeMap(data []byte, v reflect.Value) error {
-	return nil
+	iter := bsonIter{bson: data[4 : len(data)-1]}
+	for iter.Next() {
+		typ, _, _ := iter.Element()
+		switch typ {
+
+		default:
+			return &InvalidBSONTypeError{typ}
+		}
+	}
+	fmt.Printf("%q\n", data)
+	return iter.Err()
 }
 
 // bsonIter is an interator over a BSON document.
@@ -90,7 +102,7 @@ func (b *bsonIter) Next() bool {
 	}
 	i := bytes.IndexByte(b.bson[1:], 0)
 	if i < 0 {
-		b.err = errors.New("corrupt BSON")
+		b.err = errors.New("corrupt BSON ename")
 		return false
 	}
 	i += 2
@@ -118,6 +130,9 @@ func (b *bsonIter) Next() bool {
 		}
 		element = rest[:elen]
 		rest = rest[elen:]
+	case 0x3:
+		// BSON document
+		fallthrough
 	case 0x04:
 		// array (as BSON document)
 		var elen int
@@ -128,6 +143,36 @@ func (b *bsonIter) Next() bool {
 		}
 		element = rest[:elen]
 		rest = rest[elen:]
+	case 0x09:
+		// UTC datetime
+		// int64
+		if len(rest) < 8 {
+			b.err = errors.New("corrupt BSON reading utc datetime")
+			return false
+		}
+		element, rest = rest[:8], rest[8:]
+	case 0x0a:
+		// null
+	case 0x0b:
+		// regex
+		if len(rest) < 2 {
+			// need at least two bytes for empty cstrings
+			b.err = errors.New("corrupt BSON reading regex")
+			return false
+		}
+		i := bytes.IndexByte(rest, 0)
+		if i < 0 {
+			b.err = errors.New("corrupt BSON regex 1")
+			return false
+		}
+		i++
+		j := bytes.IndexByte(rest[i+1:], 0)
+		if j < 0 {
+			b.err = errors.New("corrupt BSON regex 2")
+			return false
+		}
+		j++
+		element, rest = rest[:i+j+1], rest[i+j+1:]
 	case 0x10:
 		// int32
 		if len(rest) < 4 {
