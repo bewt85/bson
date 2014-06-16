@@ -85,7 +85,7 @@ func (b *bsonIter) Next() bool {
 	case 1:
 		// error, there must be at least 2 bytes remaining to be
 		// valid BSON
-		b.err = errors.New("corrupt BSON")
+		b.err = errors.New("corrupt BSON, only 1 byte remains")
 		return false
 	}
 	i := bytes.IndexByte(b.bson[1:], 0)
@@ -97,16 +97,33 @@ func (b *bsonIter) Next() bool {
 	ename, rest := b.bson[:i], b.bson[i:]
 	var element []byte
 	switch typ := ename[0]; typ {
+	case 0x01:
+		// double
+		if len(rest) < 8 {
+			b.err = errors.New("corrupt BSON reading double")
+			return false
+		}
+		element, rest = rest[:8], rest[8:]
 	case 0x02:
 		// UTF-8 string
 		if len(rest) < 5 {
-			b.err = errors.New("corrupt BSON")
+			b.err = errors.New("corrupt BSON reading utf8 string len")
 			return false
 		}
 		var elen int
 		elen, rest = readInt32(rest)
 		if len(rest) < elen {
-			b.err = errors.New("corrupt BSON")
+			b.err = errors.New("corrupt BSON reading utf8 string")
+			return false
+		}
+		element = rest[:elen]
+		rest = rest[elen:]
+	case 0x04:
+		// array (as BSON document)
+		var elen int
+		elen, _ = readInt32(rest)
+		if len(rest) < elen {
+			b.err = fmt.Errorf("corrupt document: want %x bytes, have %x", elen, len(rest))
 			return false
 		}
 		element = rest[:elen]
@@ -135,5 +152,5 @@ type InvalidBSONTypeError struct {
 }
 
 func (e *InvalidBSONTypeError) Error() string {
-	return fmt.Sprintf("bson: unknown element type %q", e.Type)
+	return fmt.Sprintf("bson: unknown element type %x", e.Type)
 }
