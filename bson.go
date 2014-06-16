@@ -35,7 +35,10 @@ func Marshal(v interface{}) ([]byte, error) {
 // Portions of data may be retained by the decoded result in v. Data should
 // not be reused.
 func Unmarshal(data []byte, v interface{}) error {
-	return nil
+	if len(data) < 5 {
+		return ErrTooShort
+	}
+	return decode(data, v)
 }
 
 // A Decoder reads and decodes BSON objects from an input stream.
@@ -60,9 +63,6 @@ func (d *Decoder) Decode(v interface{}) error {
 	}
 	doclen := int32(binary.LittleEndian.Uint32(header[:]))
 	doclen -= int32(unsafe.Sizeof(doclen))
-	if doclen < 1 {
-		return ErrTooShort
-	}
 	r := io.LimitReader(d.r, int64(doclen))
 	buf := bytes.NewBuffer(header[:])
 	n, err := io.Copy(buf, r)
@@ -92,4 +92,24 @@ func NewEncoder(w io.Writer) *Encoder {
 // values to BSON.
 func (e *Encoder) Encode(v interface{}) error {
 	return nil
+}
+
+// readInt32 returns the value of the first 4 bytes of buf as a little endian
+// int32. The remaining bytes are return as a convenience.
+// If there is less than 4 bytes of data in buf, the function will panic.
+func readInt32(buf []byte) (int, []byte) {
+	v := int(buf[0]) | int(buf[1])<<8 | int(buf[2])<<16 | int(buf[3])<<24
+	return v, buf[4:]
+}
+
+// readCstring returns a []byte representing the cstring value, including
+// the trailing \0.
+func readCstring(buf []byte) ([]byte, []byte, error) {
+	switch i := bytes.IndexByte(buf, 0); i {
+	case -1:
+		return nil, nil, errors.New("bson: cstring missing \\0")
+	default:
+		i++
+		return buf[:i], buf[i:], nil
+	}
 }
