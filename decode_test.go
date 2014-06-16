@@ -40,11 +40,7 @@ var bsonIterTests = []struct {
 	expected []element
 	err      error
 }{{
-	bson:     []byte{},
-	expected: []element{},
-	err:      nil,
-}, {
-	bson: []byte("\x02hello\x00\x06\x00\x00\x00world\x00"),
+	bson: []byte("\x16\x00\x00\x00\x02hello\x00\x06\x00\x00\x00world\x00\x00"),
 	expected: []element{{
 		typ:     0x02, // utf-8 string
 		ename:   cstring("hello"),
@@ -52,18 +48,42 @@ var bsonIterTests = []struct {
 	}},
 	err: nil,
 }, {
-	bson: []byte("\x04BSON\x00\x26\x00\x00\x00\x020\x00\x08\x00\x00\x00awesome\x00\x011\x00\x33\x33\x33\x33\x33\x33\x14\x40\x102\x00\xc2\x07\x00\x00\x00"),
+	bson: []byte("\x31\x00\x00\x00\x04BSON\x00\x26\x00\x00\x00\x020\x00\x08\x00\x00\x00awesome\x00\x011\x00\x33\x33\x33\x33\x33\x33\x14\x40\x102\x00\xc2\x07\x00\x00\x00\x00"),
 	expected: []element{{
 		typ:     0x4, // bson array
 		ename:   cstring("BSON"),
 		element: []byte("\x26\x00\x00\x00\x020\x00\x08\x00\x00\x00awesome\x00\x011\x00\x33\x33\x33\x33\x33\x33\x14\x40\x102\x00\xc2\x07\x00\x00\x00"),
 	}},
 	err: nil,
+}, {
+	// test1.bson
+	bson: []byte{0x0e, 0x00, 0x00, 0x00, 0x10, 0x69, 0x6e, 0x74, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00},
+	expected: []element{{
+		typ:     0x10,
+		ename:   cstring("int"),
+		element: []byte{0x01, 0, 0, 0},
+	}},
+}, {
+	// test2.bson
+	bson: []byte{0x14, 0x00, 0x00, 0x00, 0x12, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	expected: []element{{
+		typ:     0x12,
+		ename:   cstring("int64"),
+		element: []byte{0x01, 0, 0, 0, 0, 0, 0, 0},
+	}},
+}, {
+	// test3.bson
+	bson: []byte{0x15, 0x00, 0x00, 0x00, 0x01, 0x64, 0x6f, 0x75, 0x62, 0x6c, 0x65, 0x00, 0x2b, 0x87, 0x16, 0xd9, 0xce, 0xf7, 0xf1, 0x3f, 0x00},
+	expected: []element{{
+		typ:     0x1,
+		ename:   cstring("double"),
+		element: []uint8{0x2b, 0x87, 0x16, 0xd9, 0xce, 0xf7, 0xf1, 0x3f},
+	}},
 }}
 
 func TestBsonIter(t *testing.T) {
 	for _, tt := range bsonIterTests {
-		iter := bsonIter{bson: tt.bson}
+		iter := bsonIter{bson: tt.bson[4 : len(tt.bson)-1]}
 		got := make([]element, 0)
 		for iter.Next() {
 			typ, ename, value := iter.Element()

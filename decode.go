@@ -128,6 +128,20 @@ func (b *bsonIter) Next() bool {
 		}
 		element = rest[:elen]
 		rest = rest[elen:]
+	case 0x10:
+		// int32
+		if len(rest) < 4 {
+			b.err = errors.New("corrupt BSON reading int32")
+			return false
+		}
+		element, rest = rest[:4], rest[4:]
+	case 0x12:
+		// int64
+		if len(rest) < 8 {
+			b.err = errors.New("corrupt BSON reading int64")
+			return false
+		}
+		element, rest = rest[:8], rest[8:]
 	default:
 		b.err = &InvalidBSONTypeError{typ}
 		return false
