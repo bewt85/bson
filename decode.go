@@ -213,3 +213,23 @@ type InvalidBSONTypeError struct {
 func (e *InvalidBSONTypeError) Error() string {
 	return fmt.Sprintf("bson: unknown element type %x", e.Type)
 }
+
+// readInt32 returns the value of the first 4 bytes of buf as a little endian
+// int32. The remaining bytes are return as a convenience.
+// If there is less than 4 bytes of data in buf, the function will panic.
+func readInt32(buf []byte) (int, []byte) {
+	v := int(buf[0]) | int(buf[1])<<8 | int(buf[2])<<16 | int(buf[3])<<24
+	return v, buf[4:]
+}
+
+// readCstring returns a []byte representing the cstring value, including
+// the trailing \0.
+func readCstring(buf []byte) ([]byte, []byte, error) {
+	switch i := bytes.IndexByte(buf, 0); i {
+	case -1:
+		return nil, nil, errors.New("bson: cstring missing \\0")
+	default:
+		i++
+		return buf[:i], buf[i:], nil
+	}
+}

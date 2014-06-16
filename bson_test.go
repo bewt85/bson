@@ -2,7 +2,6 @@ package bson
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"reflect"
 	"testing"
@@ -130,67 +129,6 @@ func TestDecoderDecode(t *testing.T) {
 		}
 		if !reflect.DeepEqual(tt.expected, v) {
 			t.Errorf("Decoder.Decode(%v): expected %v, got %v", tt.data, tt.expected, v)
-		}
-	}
-}
-
-var readInt32Tests = []struct {
-	data     []byte
-	expected int
-	rest     []byte
-}{{
-	data:     []byte{0x1, 0x1, 0x0, 0x0},
-	expected: 0x101,
-	rest:     []byte{},
-}, {
-	data:     []byte{0x0, 0x0, 0x0, 0x1},
-	expected: 0x01000000,
-	rest:     []byte{},
-}, {
-	data:     []byte{0x0f, 0x0f, 0x0f, 0x0f, 0x0f},
-	expected: 0x0f0f0f0f,
-	rest:     []byte{0x0f},
-}}
-
-func TestReadInt32(t *testing.T) {
-	for _, tt := range readInt32Tests {
-		got, rest := readInt32(tt.data)
-		if got != tt.expected || !reflect.DeepEqual(tt.rest, rest) {
-			t.Errorf("readInt32(%v): expected %v %v, got %v, %v", tt.data, tt.expected, tt.rest, got, rest)
-		}
-	}
-}
-
-func cstring(s string) []byte {
-	return append([]byte(s), 0)
-}
-
-var readCstringTests = []struct {
-	data           []byte
-	expected, rest []byte
-	err            error
-}{{
-	data:     []byte{},
-	expected: nil,
-	rest:     nil,
-	err:      errors.New("bson: cstring missing \\0"),
-}, {
-	data:     cstring("bson"),
-	expected: cstring("bson"),
-	rest:     []byte{},
-	err:      nil,
-}, {
-	data:     cstring("bson\x00"),
-	expected: cstring("bson"),
-	rest:     []byte{0},
-	err:      nil,
-}}
-
-func TestReadCstring(t *testing.T) {
-	for _, tt := range readCstringTests {
-		got, rest, err := readCstring(tt.data)
-		if !reflect.DeepEqual(tt.err, err) || !reflect.DeepEqual(tt.expected, got) || !reflect.DeepEqual(tt.rest, rest) {
-			t.Errorf("readCstring(%v): expected %v %v %v, got %v %v %v", tt.data, tt.expected, tt.rest, tt.err, got, rest, err)
 		}
 	}
 }
