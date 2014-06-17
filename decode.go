@@ -17,7 +17,6 @@ func (e *InvalidUnmarshalError) Error() string {
 	if e.Type == nil {
 		return "bson: Unmarshal(nil)"
 	}
-
 	if e.Type.Kind() != reflect.Ptr {
 		return "bson: Unmarshal(non-pointer " + e.Type.String() + ")"
 	}
@@ -27,6 +26,7 @@ func (e *InvalidUnmarshalError) Error() string {
 // decode decodes data into v according to the rules detailed in Unmarshal.
 func decode(data []byte, v interface{}) error {
 	doclen, buf := readInt32(data)
+	fmt.Printf("%v %v %v %q\n", doclen, len(data), len(buf), data)
 	if len(data) != doclen {
 		return ErrTooShort
 	}
@@ -55,14 +55,19 @@ func decodeStruct(data []byte, v reflect.Value) error {
 func decodeMap(data []byte, v reflect.Value) error {
 	iter := reader{bson: data[4 : len(data)-1]}
 	for iter.Next() {
-		typ, _, _ := iter.Element()
+		typ, ename, element := iter.Element()
 		switch typ {
-
+		case 0x10:
+			ename := string(ename)
+			kv := reflect.ValueOf(ename)
+			element := int(element[0]) | int(element[1])<<8 | int(element[2])<<16 | int(element[3])<<24
+			vv := reflect.ValueOf(element)
+			v.SetMapIndex(kv, vv)
 		default:
 			return &InvalidBSONTypeError{typ}
 		}
 	}
-	fmt.Printf("%q\n", data)
+	//fmt.Printf("%q\n", data)
 	return iter.Err()
 }
 

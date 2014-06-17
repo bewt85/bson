@@ -13,12 +13,16 @@ var encodeTests = []struct {
 }{{
 	m:        M{"int": int32(1)},
 	expected: []byte("\b\x00\x00\x00int\x00\x01\x00\x00\x00\x00"),
+}, {
+	m:        M{"int": int64(1)},
+	expected: []byte("\f\x00\x00\x00int\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00"),
 }}
 
 func TestWriterWriteMap(t *testing.T) {
 	for _, tt := range encodeTests {
 		var w writer
-		err := w.writeMap(tt.m)
+		rv := reflect.ValueOf(tt.m)
+		err := w.writeMap(rv)
 		if err != nil {
 			t.Errorf("writeMap(%q): %v", tt.m, err)
 			continue

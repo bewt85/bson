@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"unsafe"
 )
 
 var ErrTooShort = errors.New("bson document too short")
@@ -23,7 +22,7 @@ var ErrTooShort = errors.New("bson document too short")
 // Map values encode as JSON objects. The map's key type must be string;
 // the object keys are used directly as map keys.
 func Marshal(v interface{}) ([]byte, error) {
-	return nil, nil
+	return encode(v)
 }
 
 // Unmarshal parses the BSON-encoded data and stores the result in the
@@ -61,9 +60,8 @@ func (d *Decoder) Decode(v interface{}) error {
 	if _, err := io.ReadFull(d.r, header[:]); err != nil {
 		return err
 	}
-	doclen := int32(binary.LittleEndian.Uint32(header[:]))
-	doclen -= int32(unsafe.Sizeof(doclen))
-	r := io.LimitReader(d.r, int64(doclen))
+	doclen := int64(binary.LittleEndian.Uint32(header[:])) - 4
+	r := io.LimitReader(d.r, doclen)
 	buf := bytes.NewBuffer(header[:])
 	n, err := io.Copy(buf, r)
 	if err != nil {
@@ -91,5 +89,10 @@ func NewEncoder(w io.Writer) *Encoder {
 // See the documentation for Marshal for details about the conversion of Go
 // values to BSON.
 func (e *Encoder) Encode(v interface{}) error {
-	return nil
+	buf, err := Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, err = e.w.Write(buf)
+	return err
 }

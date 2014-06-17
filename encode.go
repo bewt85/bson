@@ -1,9 +1,36 @@
 package bson
 
 import (
+	"errors"
 	"reflect"
-	"unsafe"
 )
+
+// encode encodes v according to the rules of Marshal into a BSON document.
+func encode(v interface{}) ([]byte, error) {
+	rv := reflect.ValueOf(v)
+	if rv.IsNil() {
+		return nil, &MarshalerError{Type: rv.Type(), Err: errors.New("was nil")}
+	}
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
+	}
+	var w writer
+	switch rv.Kind() {
+	case reflect.Map:
+		err := w.writeMap(rv)
+		return w.bson, err
+	}
+	return nil, &MarshalerError{Type: rv.Type(), Err: errors.New("unsupported")}
+}
+
+type MarshalerError struct {
+	Type reflect.Type
+	Err  error
+}
+
+func (e *MarshalerError) Error() string {
+	return "json: error calling MarshalJSON for type " + e.Type.String() + ": " + e.Err.Error()
+}
 
 // writer writes formatted BSON objects.
 type writer struct {
@@ -12,19 +39,21 @@ type writer struct {
 
 // writeMap encodes the contents of a map[string]interface{} as a BSON
 // document.
-func (w *writer) writeMap(v map[string]interface{}) error {
+func (w *writer) writeMap(v reflect.Value) error {
 	off := len(w.bson)                  // the location of our header
 	w.bson = append(w.bson, 0, 0, 0, 0) // document header
 	var count int
-
-	for k, v := range v {
+	keys := v.MapKeys()
+	for _, k := range keys {
 		// write element key
-		count += w.writeCstring(k)
-		switch v := v.(type) {
-		case int32:
-			count += w.writeInt32(v)
+		count += w.writeCstring(k.String())
+		switch v := v.MapIndex(k).Elem(); v.Kind() {
+		case reflect.Int32:
+			count += w.writeInt32(int32(v.Int()))
+		case reflect.Int64:
+			count += w.writeInt64(int64(v.Int()))
 		default:
-			return &UnsupportedTypeError{reflect.TypeOf(v)}
+			return &UnsupportedTypeError{v.Type()}
 		}
 
 	}
@@ -45,12 +74,14 @@ func (w *writer) writeCstring(s string) int {
 }
 
 func (w *writer) writeInt32(v int32) int {
-	w.bson = append(w.bson,
-		byte(v),
-		byte(v>>8),
-		byte(v>>16),
-		byte(v>>24))
-	return int(unsafe.Sizeof(v))
+	w.bson = append(w.bson, byte(v), byte(v>>8), byte(v>>16), byte(v>>24))
+	return sizeofInt32
+}
+
+func (w *writer) writeInt64(v int64) int {
+	w.bson = append(w.bson, byte(v), byte(v>>8), byte(v>>16), byte(v>>24),
+		byte(v>>32), byte(v>>40), byte(v>>48), byte(v>>56))
+	return sizeofInt64
 }
 
 // An UnsupportedTypeError is returned by Marshal when attempting

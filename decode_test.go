@@ -142,11 +142,11 @@ func TestReader(t *testing.T) {
 		}
 		err := r.Err()
 		if !reflect.DeepEqual(err, tt.err) {
-			t.Errorf("bsonIter %v: expected err %v, got %v", tt.bson, tt.err, err)
+			t.Errorf("reader %q: expected err %v, got %v", tt.bson, tt.err, err)
 			continue
 		}
 		if !reflect.DeepEqual(tt.expected, got) {
-			t.Errorf("bsonIter %q: expected %#q, got %#q", tt.bson, tt.expected, got)
+			t.Errorf("reader %q: expected %#q, got %#q", tt.bson, tt.expected, got)
 		}
 	}
 }
