@@ -1,8 +1,6 @@
-use 'godoc cmd//target' for documentation on the /target command 
-
 
 # bson
-    import "."
+    import "github.com/pkg/bson"
 
 Package bson implements encoding and decoding of BSON objects as defined
 at a href="http://bsonspec.org/spec.html">http://bsonspec.org/spec.html</a>. The mapping between BSON objects and Go
