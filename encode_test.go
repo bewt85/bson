@@ -22,7 +22,7 @@ func TestWriterWriteMap(t *testing.T) {
 	for _, tt := range encodeTests {
 		var w writer
 		rv := reflect.ValueOf(tt.m)
-		err := w.writeMap(rv)
+		_, err := w.writeMap(rv)
 		if err != nil {
 			t.Errorf("writeMap(%q): %v", tt.m, err)
 			continue

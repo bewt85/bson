@@ -63,6 +63,14 @@ func decodeMap(data []byte, v reflect.Value) error {
 			// utf-8 string
 			vv := reflect.ValueOf(string(trimlast(element)))
 			v.SetMapIndex(kv, vv)
+		case 0x03:
+			// BSON document (map)
+			m := make(map[string]interface{})
+			vv := reflect.ValueOf(m)
+			if err := decodeMap(element, vv); err != nil {
+				return err
+			}
+			v.SetMapIndex(kv, vv)
 		case 0x04:
 			// array
 			s := make([]interface{}, 0)

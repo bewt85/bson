@@ -19,7 +19,7 @@ func encode(v interface{}) ([]byte, error) {
 	var w writer
 	switch rv.Kind() {
 	case reflect.Map:
-		err := w.writeMap(rv)
+		_, err := w.writeMap(rv)
 		return w.bson, err
 	}
 	return nil, &MarshalerError{Type: rv.Type(), Err: errors.New("unsupported")}
@@ -41,7 +41,7 @@ type writer struct {
 
 // writeMap encodes the contents of a map[string]interface{} as a BSON
 // document.
-func (w *writer) writeMap(v reflect.Value) error {
+func (w *writer) writeMap(v reflect.Value) (int, error) {
 	off := len(w.bson)                  // the location of our header
 	w.bson = append(w.bson, 0, 0, 0, 0) // document header
 	count := sizeofInt32 + 1            // header plus trailing 0x0
@@ -50,7 +50,7 @@ func (w *writer) writeMap(v reflect.Value) error {
 		v := v.MapIndex(k)
 		n, err := w.writeValue(k.String(), v)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		count += n
 	}
@@ -60,7 +60,7 @@ func (w *writer) writeMap(v reflect.Value) error {
 	w.bson[off+1] = byte(count >> 8)
 	w.bson[off+2] = byte(count >> 16)
 	w.bson[off+3] = byte(count >> 24)
-	return nil
+	return count, nil
 }
 
 func (w *writer) writeValue(ename string, v reflect.Value) (int, error) {
@@ -92,6 +92,15 @@ func (w *writer) writeValue(ename string, v reflect.Value) (int, error) {
 		count += w.writeType(0x04)
 		count += w.writeCstring(ename)
 		n, err := w.writeSlice(v)
+		if err != nil {
+			return 0, err
+		}
+		count += n
+	case reflect.Map:
+		// maps encoded as documents
+		count += w.writeType(0x03)
+		count += w.writeCstring(ename)
+		n, err := w.writeMap(v)
 		if err != nil {
 			return 0, err
 		}

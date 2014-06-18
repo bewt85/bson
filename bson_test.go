@@ -129,6 +129,9 @@ var libbsonTests = []string{
 	// "test4.bson",
 	"test5.bson",
 	//	"test6.bson",
+	//"test7.bson",
+	"test8.bson",
+	//"test9.bson",
 }
 
 // round trip the data in testdata/ taken from the libbson tests.
