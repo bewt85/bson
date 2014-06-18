@@ -42,15 +42,18 @@ type writer struct {
 func (w *writer) writeMap(v reflect.Value) error {
 	off := len(w.bson)                  // the location of our header
 	w.bson = append(w.bson, 0, 0, 0, 0) // document header
-	var count int
+	count := sizeofInt32 + 1            // header plus trailing 0x0
 	keys := v.MapKeys()
 	for _, k := range keys {
 		// write element key
-		count += w.writeCstring(k.String())
 		switch v := v.MapIndex(k).Elem(); v.Kind() {
 		case reflect.Int32:
+			count += w.writeType(0x10)
+			count += w.writeCstring(k.String())
 			count += w.writeInt32(int32(v.Int()))
 		case reflect.Int64:
+			count += w.writeType(0x12)
+			count += w.writeCstring(k.String())
 			count += w.writeInt64(int64(v.Int()))
 		default:
 			return &UnsupportedTypeError{v.Type()}
@@ -67,6 +70,11 @@ func (w *writer) writeMap(v reflect.Value) error {
 	return nil
 }
 
+func (w *writer) writeType(typ byte) int {
+	w.bson = append(w.bson, typ)
+	return 1
+}
+
 func (w *writer) writeCstring(s string) int {
 	w.bson = append(w.bson, s...)
 	w.bson = append(w.bson, 0)
@@ -81,7 +89,7 @@ func (w *writer) writeInt32(v int32) int {
 func (w *writer) writeInt64(v int64) int {
 	w.bson = append(w.bson, byte(v), byte(v>>8), byte(v>>16), byte(v>>24),
 		byte(v>>32), byte(v>>40), byte(v>>48), byte(v>>56))
-	return sizeofInt64
+	return 8 // sizeofInt64
 }
 
 // An UnsupportedTypeError is returned by Marshal when attempting

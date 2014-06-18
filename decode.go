@@ -25,20 +25,15 @@ func (e *InvalidUnmarshalError) Error() string {
 
 // decode decodes data into v according to the rules detailed in Unmarshal.
 func decode(data []byte, v interface{}) error {
-	doclen, buf := readInt32(data)
-	fmt.Printf("%v %v %v %q\n", doclen, len(data), len(buf), data)
-	if len(data) != doclen {
-		return ErrTooShort
-	}
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		return &InvalidUnmarshalError{reflect.TypeOf(v)}
 	}
 	switch rv := rv.Elem(); rv.Kind() {
 	case reflect.Struct:
-		return decodeStruct(buf, rv)
+		return decodeStruct(data, rv)
 	case reflect.Map:
-		return decodeMap(buf, rv)
+		return decodeMap(data, rv)
 	default:
 		return &InvalidUnmarshalError{rv.Type()}
 	}
@@ -56,20 +51,28 @@ func decodeMap(data []byte, v reflect.Value) error {
 	iter := reader{bson: data[4 : len(data)-1]}
 	for iter.Next() {
 		typ, ename, element := iter.Element()
+		kv := reflect.ValueOf(string(trimlast(ename)))
 		switch typ {
+		case 0x02:
+			// utf-8 string
+			vv := reflect.ValueOf(string(trimlast(element)))
+			v.SetMapIndex(kv, vv)
 		case 0x10:
-			ename := string(ename)
-			kv := reflect.ValueOf(ename)
-			element := int(element[0]) | int(element[1])<<8 | int(element[2])<<16 | int(element[3])<<24
+			element := int32(element[0]) | int32(element[1])<<8 | int32(element[2])<<16 | int32(element[3])<<24
+			vv := reflect.ValueOf(element)
+			v.SetMapIndex(kv, vv)
+		case 0x12:
+			element := int64(element[0]) | int64(element[1])<<8 | int64(element[2])<<16 | int64(element[3])<<24 | int64(element[4])<<32 | int64(element[5]<<40) | int64(element[6]<<48) | int64(element[7]<<56)
 			vv := reflect.ValueOf(element)
 			v.SetMapIndex(kv, vv)
 		default:
 			return &InvalidBSONTypeError{typ}
 		}
 	}
-	//fmt.Printf("%q\n", data)
 	return iter.Err()
 }
+
+func trimlast(s []byte) []byte { return s[:len(s)-1] }
 
 // reader is an iterator over a BSON document.
 type reader struct {

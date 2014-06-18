@@ -2,7 +2,6 @@ package bson
 
 import (
 	"bytes"
-	"io"
 	"reflect"
 	"testing"
 )
@@ -13,21 +12,21 @@ var marshalTests = []struct {
 	err      error
 }{{
 	v:        M{"int": int32(1)},
-	expected: []byte("\b\x00\x00\x00int\x00\x01\x00\x00\x00\x00"),
+	expected: []byte("\x0e\x00\x00\x00\x10int\x00\x01\x00\x00\x00\x00"),
 }, {
-	v:        M{"int": int64(1)},
-	expected: []byte("\f\x00\x00\x00int\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00"),
+	v:        M{"int64": int64(1)},
+	expected: []byte{0x14, 0x00, 0x00, 0x00, 0x12, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 }}
 
 func TestMarshal(t *testing.T) {
 	for _, tt := range marshalTests {
 		got, err := Marshal(tt.v)
 		if err != tt.err {
-			t.Errorf("Marshal(%q): expected err: %v, got %v", tt.v, tt.err, err)
+			t.Errorf("Marshal(%#v): expected err: %v, got %v", tt.v, tt.err, err)
 			continue
 		}
 		if !reflect.DeepEqual(tt.expected, got) {
-			t.Errorf("Marshal(%q): expected: %v, got: %v", tt.v, tt.expected, got)
+			t.Errorf("Marshal(%#v): expected: % #x, got: % #x", tt.v, tt.expected, got)
 		}
 	}
 }
@@ -37,41 +36,26 @@ var unmarshalTests = []struct {
 	expected interface{}
 	err      error
 }{{
-	data: []byte{},
-	err:  ErrTooShort,
+	data:     []byte("\x0e\x00\x00\x00\x10int\x00\x01\x00\x00\x00\x00"),
+	expected: map[string]interface{}{"int": int32(1)},
 }, {
-	data: []byte{0x01},
-	err:  ErrTooShort,
-}, {
-	data: []byte{0x05, 0x0, 0x0, 0x0},
-	err:  ErrTooShort,
-}, {
-	data: []byte{0x04, 0x0, 0x0, 0x0},
-	err:  ErrTooShort,
-}, {
-	data: []byte{0x04, 0x0, 0x0, 0x0, 0x0},
-	err:  ErrTooShort,
-}, {
-	data:     []byte("\f\x00\x00\x00int\x00\x01\x00\x00\x00\x00"),
-	expected: M{"int": int32(1)},
-}, {
-	data:     []byte("\x11\x00\x00\x00int\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00"),
-	expected: M{"int": int64(1)},
+	data:     []byte{0x14, 0x00, 0x00, 0x00, 0x12, 0x69, 0x6e, 0x74, 0x36, 0x34, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	expected: map[string]interface{}{"int64": int64(1)},
 }, {
 	data:     []byte("\x16\x00\x00\x00\x02hello\x00\x06\x00\x00\x00world\x00\x00"),
-	expected: M{"hello": "world"},
+	expected: map[string]interface{}{"hello": "world"},
 }}
 
 func TestUnmarshal(t *testing.T) {
 	for _, tt := range unmarshalTests {
 		v := make(map[string]interface{})
 		err := Unmarshal(tt.data, &v)
-		if err != tt.err {
-			t.Errorf("Unmarshal(%q): expected err: %v, got %v", tt.data, tt.err, err)
+		if err != nil {
+			t.Errorf("Unmarshal(% #x): expected err: %v, got %v", tt.data, tt.err, err)
 			continue
 		}
 		if !reflect.DeepEqual(tt.expected, v) {
-			t.Errorf("Unmarshal(%q): expected %q, got %q", tt.data, tt.expected, v)
+			t.Errorf("Unmarshal(%v): expected %# x, got %# x", tt.data, tt.expected, v)
 		}
 	}
 }
@@ -115,49 +99,19 @@ func TestEncoderEncode(t *testing.T) {
 		}
 		got := w.Bytes()
 		if !reflect.DeepEqual(tt.expected, got) {
-			t.Errorf("Encoder.Encode(%q): expected: %v, got: %v", tt.v, tt.expected, got)
+			t.Errorf("Encoder.Encode(%#v): expected: %# x, got: %# x", tt.v, tt.expected, got)
 		}
 	}
 }
 
-var decoderDecodeTests = []struct {
-	data     []byte
-	expected interface{}
-	err      error
-}{{
-	data: []byte{},
-	err:  io.EOF,
-}, {
-	data: []byte{0x01},
-	err:  io.ErrUnexpectedEOF,
-}, {
-	data: []byte{0x05, 0x0, 0x0, 0x0},
-	err:  io.ErrUnexpectedEOF,
-}, {
-	data: []byte{0x04, 0x0, 0x0, 0x0},
-	err:  ErrTooShort,
-}, {
-	data: []byte{0x04, 0x0, 0x0, 0x0, 0x0},
-	err:  ErrTooShort,
-}, {
-	data:     []byte("\x0c\x00\x00\x00int\x00\x01\x00\x00\x00\x00"),
-	expected: M{"int": int32(1)},
-}, {
-	data:     []byte("\x11\x00\x00\x00int\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00"),
-	expected: M{"int": int64(1)},
-}, {
-	data:     []byte("\x16\x00\x00\x00\x02hello\x00\x06\x00\x00\x00world\x00\x00"),
-	expected: M{"hello": "world"},
-}}
-
 func TestDecoderDecode(t *testing.T) {
-	for _, tt := range decoderDecodeTests {
+	for _, tt := range unmarshalTests {
 		r := bytes.NewReader(tt.data)
 		d := NewDecoder(r)
 		v := make(map[string]interface{})
 		err := d.Decode(&v)
 		if !reflect.DeepEqual(tt.err, err) {
-			t.Errorf("Decoder.Decode(%q): expected err: %v, got %v", tt.data, tt.err, err)
+			t.Errorf("Decoder.Decode(% #x): expected err: %v, got %v", tt.data, tt.err, err)
 			continue
 		}
 		if !reflect.DeepEqual(tt.expected, v) {

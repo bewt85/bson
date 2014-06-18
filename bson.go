@@ -57,17 +57,21 @@ func NewDecoder(r io.Reader) *Decoder {
 // BSON into a Go value.
 func (d *Decoder) Decode(v interface{}) error {
 	var header [4]byte
-	if _, err := io.ReadFull(d.r, header[:]); err != nil {
+	n, err := io.ReadFull(d.r, header[:])
+	if err != nil {
 		return err
+	}
+	if n < 4 {
+		return ErrTooShort
 	}
 	doclen := int64(binary.LittleEndian.Uint32(header[:])) - 4
 	r := io.LimitReader(d.r, doclen)
 	buf := bytes.NewBuffer(header[:])
-	n, err := io.Copy(buf, r)
+	nn, err := io.Copy(buf, r)
 	if err != nil {
 		return err
 	}
-	if n != int64(doclen) {
+	if nn != int64(doclen) {
 		return io.ErrUnexpectedEOF
 	}
 	return Unmarshal(buf.Bytes(), v)
