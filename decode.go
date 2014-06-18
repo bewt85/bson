@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 )
 
@@ -53,9 +54,22 @@ func decodeMap(data []byte, v reflect.Value) error {
 		typ, ename, element := iter.Element()
 		kv := reflect.ValueOf(string(trimlast(ename)))
 		switch typ {
+		case 0x01:
+			// double
+			bits := uint64(element[0]) | uint64(element[1])<<8 | uint64(element[2])<<16 | uint64(element[3])<<24 | uint64(element[4])<<32 | uint64(element[5]<<40) | uint64(element[6]<<48) | uint64(element[7]<<56)
+			vv := reflect.ValueOf(math.Float64frombits(bits))
+			v.SetMapIndex(kv, vv)
 		case 0x02:
 			// utf-8 string
 			vv := reflect.ValueOf(string(trimlast(element)))
+			v.SetMapIndex(kv, vv)
+		case 0x04:
+			// array
+			s := make([]interface{}, 0)
+			vv := reflect.ValueOf(s)
+			if err := decodeSlice(element, vv); err != nil {
+				return err
+			}
 			v.SetMapIndex(kv, vv)
 		case 0x10:
 			element := int32(element[0]) | int32(element[1])<<8 | int32(element[2])<<16 | int32(element[3])<<24
@@ -65,6 +79,22 @@ func decodeMap(data []byte, v reflect.Value) error {
 			element := int64(element[0]) | int64(element[1])<<8 | int64(element[2])<<16 | int64(element[3])<<24 | int64(element[4])<<32 | int64(element[5]<<40) | int64(element[6]<<48) | int64(element[7]<<56)
 			vv := reflect.ValueOf(element)
 			v.SetMapIndex(kv, vv)
+		default:
+			return &InvalidBSONTypeError{typ}
+		}
+	}
+	return iter.Err()
+}
+
+func decodeSlice(data []byte, v reflect.Value) error {
+	iter := reader{bson: data[4 : len(data)-1]}
+	for iter.Next() {
+		typ, _, element := iter.Element()
+		switch typ {
+		case 0x10:
+			element := int32(element[0]) | int32(element[1])<<8 | int32(element[2])<<16 | int32(element[3])<<24
+			vv := reflect.ValueOf(element)
+			reflect.Append(v, vv)
 		default:
 			return &InvalidBSONTypeError{typ}
 		}

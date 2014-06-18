@@ -2,6 +2,8 @@ package bson
 
 import (
 	"bytes"
+	"io/ioutil"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -116,6 +118,41 @@ func TestDecoderDecode(t *testing.T) {
 		}
 		if !reflect.DeepEqual(tt.expected, v) {
 			t.Errorf("Decoder.Decode(%q): expected %q, got %q", tt.data, tt.expected, v)
+		}
+	}
+}
+
+var libbsonTests = []string{
+	"test1.bson",
+	"test2.bson",
+	// "test3.bson",
+	// "test4.bson",
+	"test5.bson",
+	//	"test6.bson",
+}
+
+// round trip the data in testdata/ taken from the libbson tests.
+func TestLibBSONTestdata(t *testing.T) {
+	for _, tt := range libbsonTests {
+		f := filepath.Join("testdata", tt)
+		want, err := ioutil.ReadFile(f)
+		if err != nil {
+			t.Fatal(f, err)
+		}
+		d := NewDecoder(bytes.NewReader(want))
+		v := make(map[string]interface{})
+		if err := d.Decode(&v); err != nil {
+			t.Error("Decode", f, err)
+			continue
+		}
+		var out bytes.Buffer
+		e := NewEncoder(&out)
+		if err := e.Encode(v); err != nil {
+			t.Error("Encode", f, err)
+			continue
+		}
+		if got := out.Bytes(); !reflect.DeepEqual(want, got) {
+			t.Errorf("%s: want %q, got %q", f, want, got)
 		}
 	}
 }
