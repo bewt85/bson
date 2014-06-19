@@ -66,7 +66,7 @@ func (w *writer) writeMap(v reflect.Value) (int, error) {
 func (w *writer) writeValue(ename string, v reflect.Value) (int, error) {
 	var count int
 	if v.IsNil() {
-		count += w.writeType(0x09)
+		count += w.writeType(0x0a)
 		count += w.writeCstring(ename)
 		return count, nil
 	}

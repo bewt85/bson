@@ -97,8 +97,11 @@ func decodeMap(data []byte, v reflect.Value) error {
 			v.SetMapIndex(kv, vv)
 		case 0x0a:
 			// null
-			// do nothing, SetMapIndex cannot store a nil
-			// v.SetMapIndex(kv, reflect.ValueOf(interface{}(nil)))
+			// TODO(dfc) this is a bit of a hack, the
+			// map may not be of type map[string]interface{}
+			// the key could be a derived type of string.
+			m := v.Interface().(map[string]interface{})
+			m[string(trimlast(ename))] = nil
 		case 0x10:
 			element := int32(element[0]) | int32(element[1])<<8 | int32(element[2])<<16 | int32(element[3])<<24
 			vv := reflect.ValueOf(element)

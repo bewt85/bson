@@ -133,16 +133,16 @@ var libbsonTests = []string{
 	"test6.bson",
 	// "test7.bson", // []double
 	"test8.bson",
-	// "test9.bson", // null
+	"test9.bson", // null
 	// "test10.bson", // regex
 	"test11.bson",
 	//"test12.bson", // bson is awesome
 	"test13.bson", // array[bool]
-	// "test14.bson", // array[string]
+	"test14.bson", // array[string]
 	// "test15.bson", // array[datetime]
 	// "test16.bson",
 	// "test17.bson", // objectid
-	// "test18.bson", // map[nil]
+	"test18.bson", // map[nil]
 	"test19.bson",
 	// "test20.bson",
 	"test21.bson",
