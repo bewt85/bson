@@ -100,3 +100,12 @@ func (e *Encoder) Encode(v interface{}) error {
 	_, err = e.w.Write(buf)
 	return err
 }
+
+// ObjectId represnts a BSON ObjectId data type
+type ObjectId [12]byte
+
+// Datetime because dates
+type Datetime uint64
+
+// Timestamp because timestamp
+type Timestamp uint64

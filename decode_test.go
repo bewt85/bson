@@ -86,7 +86,7 @@ var decodeTests = []struct {
 	expected: []element{{
 		typ:     0x0a,
 		ename:   cstring("null"),
-		element: nil,
+		element: []byte{},
 	}},
 }, {
 	// test10.bson

@@ -65,6 +65,11 @@ func (w *writer) writeMap(v reflect.Value) (int, error) {
 
 func (w *writer) writeValue(ename string, v reflect.Value) (int, error) {
 	var count int
+	if v.IsNil() {
+		count += w.writeType(0x09)
+		count += w.writeCstring(ename)
+		return count, nil
+	}
 	switch v := v.Elem(); v.Kind() {
 	case reflect.Float64:
 		count += w.writeType(0x01)
@@ -79,6 +84,10 @@ func (w *writer) writeValue(ename string, v reflect.Value) (int, error) {
 		w.bson = append(w.bson, s...)
 		w.bson = append(w.bson, 0)
 		count += sz
+	case reflect.Bool:
+		count += w.writeType(0x08)
+		count += w.writeCstring(ename)
+		count += w.writeBool(v.Bool())
 	case reflect.Int32:
 		count += w.writeType(0x10)
 		count += w.writeCstring(ename)
@@ -134,6 +143,15 @@ func (w *writer) writeSlice(v reflect.Value) (int, error) {
 
 func (w *writer) writeType(typ byte) int {
 	w.bson = append(w.bson, typ)
+	return 1
+}
+
+func (w *writer) writeBool(b bool) int {
+	if b {
+		w.bson = append(w.bson, 0x01)
+	} else {
+		w.bson = append(w.bson, 0x00)
+	}
 	return 1
 }
 

@@ -2,6 +2,8 @@ package bson
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"io/ioutil"
 	"path/filepath"
 	"reflect"
@@ -125,13 +127,46 @@ func TestDecoderDecode(t *testing.T) {
 var libbsonTests = []string{
 	"test1.bson",
 	"test2.bson",
-	// "test3.bson",
-	// "test4.bson",
+	// "test3.bson", // double
+	//"test4.bson", // timestamp
 	"test5.bson",
-	//	"test6.bson",
-	//"test7.bson",
+	"test6.bson",
+	// "test7.bson", // []double
 	"test8.bson",
-	//"test9.bson",
+	// "test9.bson", // null
+	// "test10.bson", // regex
+	"test11.bson",
+	//"test12.bson", // bson is awesome
+	"test13.bson", // array[bool]
+	// "test14.bson", // array[string]
+	// "test15.bson", // array[datetime]
+	// "test16.bson",
+	// "test17.bson", // objectid
+	// "test18.bson", // map[nil]
+	"test19.bson",
+	// "test20.bson",
+	"test21.bson",
+	"test23.bson",
+	// "test24.bson", // binary data
+	//"test25.bson", "test32.bson" // deprecated
+	//"test26.bson", // datatime
+	// "test27.bson", // regex
+	// "test28.bson", // db pointer
+	// "test29.bson", "test30.bson", // javascript
+	// "test31.bson", // javascript w/scope
+	//"test33.bson",
+	// "test34.bson", // one byte short ...
+	// "test35.bson", // timestamp
+	// "test36.bson", // MinKey
+	// "test37.bson", // MaxKey
+	"test38.bson",
+	"test39.bson",
+	"dollarquery.bson",
+	// "dotquery.bson",
+	// "dotkey.bson",
+	// "stackoverflow.bson",
+	"test56.bson",
+	"readergrow.bson",
 }
 
 // round trip the data in testdata/ taken from the libbson tests.
@@ -145,17 +180,59 @@ func TestLibBSONTestdata(t *testing.T) {
 		d := NewDecoder(bytes.NewReader(want))
 		v := make(map[string]interface{})
 		if err := d.Decode(&v); err != nil {
-			t.Error("Decode", f, err)
+			t.Errorf("Decode (%# 0x): %s: %v", want, f, err)
 			continue
 		}
 		var out bytes.Buffer
 		e := NewEncoder(&out)
 		if err := e.Encode(v); err != nil {
-			t.Error("Encode", f, err)
+			t.Errorf("Encode", f, err)
 			continue
 		}
 		if got := out.Bytes(); !reflect.DeepEqual(want, got) {
 			t.Errorf("%s: want %q, got %q", f, want, got)
+			t.Errorf("bson: %# x, %#v", want, v)
+		}
+	}
+}
+
+var errTests = []struct {
+	f   string
+	err error
+}{
+	// "test40.bson", // panic
+	{"test41.bson", errors.New("corrupt BSON reading utf8 string")},
+	//{"test42.bson", errors.New("corrupt BSON reading utf8 string") },
+	{"overflow1.bson", io.ErrUnexpectedEOF},
+	{"overflow2.bson", errors.New("corrupt document: want f bytes, have e")},
+	{"overflow3.bson", errors.New("corrupt document: want c bytes, have b")},
+	{"overflow4.bson", errors.New("corrupt BSON reading utf8 string")},
+
+	//{"test43.bson", errors.New("corrupt BSON reading utf8 string") },
+	//{"test44.bson", errors.New("corrupt BSON reading utf8 string") },
+	//{"test45.bson", errors.New("corrupt BSON reading utf8 string") },
+	// {"test57.bson", errors.New("corrupt BSON reading utf8 string") },
+
+}
+
+func TestLibBSONError(t *testing.T) {
+	for _, tt := range errTests {
+		f := filepath.Join("testdata", tt.f)
+		want, err := ioutil.ReadFile(f)
+		if err != nil {
+			t.Fatal(f, err)
+		}
+		// test Unmarshall first
+		v := make(map[string]interface{})
+		if err := Unmarshal(want, &v); !reflect.DeepEqual(err, tt.err) {
+			//			t.Errorf("Unmarshal: expected %v, got %v", tt.err, err)
+			//		continue
+		}
+		// test Decode
+		d := NewDecoder(bytes.NewReader(want))
+		v = make(map[string]interface{})
+		if err := d.Decode(&v); !reflect.DeepEqual(err, tt.err) {
+			t.Errorf("Decode: expected %v, got %v", tt.err, err)
 		}
 	}
 }

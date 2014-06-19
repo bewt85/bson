@@ -75,13 +75,38 @@ func decodeMap(data []byte, v reflect.Value) error {
 			// array
 			s := make([]interface{}, 0)
 			vv := reflect.ValueOf(s)
-			if err := decodeSlice(element, vv); err != nil {
+			if err := decodeSlice(element, &vv); err != nil {
 				return err
 			}
 			v.SetMapIndex(kv, vv)
+		case 0x07:
+			// object id
+			var oid ObjectId
+			copy(oid[:], element)
+			vv := reflect.ValueOf(oid)
+			v.SetMapIndex(kv, vv)
+		case 0x08:
+			// boolean
+			b := element[0] == 1
+			vv := reflect.ValueOf(b)
+			v.SetMapIndex(kv, vv)
+		case 0x09:
+			// datetime
+			dt := Datetime(element[0]) | Datetime(element[1])<<8 | Datetime(element[2])<<16 | Datetime(element[3])<<24 | Datetime(element[4])<<32 | Datetime(element[5]<<40) | Datetime(element[6]<<48) | Datetime(element[7]<<56)
+			vv := reflect.ValueOf(dt)
+			v.SetMapIndex(kv, vv)
+		case 0x0a:
+			// null
+			// do nothing, SetMapIndex cannot store a nil
+			// v.SetMapIndex(kv, reflect.ValueOf(interface{}(nil)))
 		case 0x10:
 			element := int32(element[0]) | int32(element[1])<<8 | int32(element[2])<<16 | int32(element[3])<<24
 			vv := reflect.ValueOf(element)
+			v.SetMapIndex(kv, vv)
+		case 0x11:
+			// timestamp
+			ts := Timestamp(element[0]) | Timestamp(element[1])<<8 | Timestamp(element[2])<<16 | Timestamp(element[3])<<24 | Timestamp(element[4])<<32 | Timestamp(element[5]<<40) | Timestamp(element[6]<<48) | Timestamp(element[7]<<56)
+			vv := reflect.ValueOf(ts)
 			v.SetMapIndex(kv, vv)
 		case 0x12:
 			element := int64(element[0]) | int64(element[1])<<8 | int64(element[2])<<16 | int64(element[3])<<24 | int64(element[4])<<32 | int64(element[5]<<40) | int64(element[6]<<48) | int64(element[7]<<56)
@@ -94,15 +119,68 @@ func decodeMap(data []byte, v reflect.Value) error {
 	return iter.Err()
 }
 
-func decodeSlice(data []byte, v reflect.Value) error {
+func decodeSlice(data []byte, v *reflect.Value) error {
 	iter := reader{bson: data[4 : len(data)-1]}
 	for iter.Next() {
 		typ, _, element := iter.Element()
 		switch typ {
+		case 0x01:
+			// double
+			bits := uint64(element[0]) | uint64(element[1])<<8 | uint64(element[2])<<16 | uint64(element[3])<<24 | uint64(element[4])<<32 | uint64(element[5]<<40) | uint64(element[6]<<48) | uint64(element[7]<<56)
+			vv := reflect.ValueOf(math.Float64frombits(bits))
+			*v = reflect.Append(*v, vv)
+		case 0x02:
+			// utf-8 string
+			vv := reflect.ValueOf(string(trimlast(element)))
+			*v = reflect.Append(*v, vv)
+		case 0x03:
+			// BSON document (map)
+			m := make(map[string]interface{})
+			vv := reflect.ValueOf(m)
+			if err := decodeMap(element, vv); err != nil {
+				return err
+			}
+			*v = reflect.Append(*v, vv)
+		case 0x04:
+			// array
+			s := make([]interface{}, 0)
+			vv := reflect.ValueOf(s)
+			if err := decodeSlice(element, &vv); err != nil {
+				return err
+			}
+			*v = reflect.Append(*v, vv)
+		case 0x07:
+			// object id
+			var oid ObjectId
+			copy(oid[:], element)
+			vv := reflect.ValueOf(oid)
+			*v = reflect.Append(*v, vv)
+		case 0x08:
+			// boolean
+			b := element[0] == 1
+			vv := reflect.ValueOf(b)
+			*v = reflect.Append(*v, vv)
+		case 0x09:
+			// datetime
+			dt := Datetime(element[0]) | Datetime(element[1])<<8 | Datetime(element[2])<<16 | Datetime(element[3])<<24 | Datetime(element[4])<<32 | Datetime(element[5]<<40) | Datetime(element[6]<<48) | Datetime(element[7]<<56)
+			vv := reflect.ValueOf(dt)
+			*v = reflect.Append(*v, vv)
+		case 0x0a:
+			// null
+			*v = reflect.Append(*v, reflect.ValueOf(nil))
 		case 0x10:
 			element := int32(element[0]) | int32(element[1])<<8 | int32(element[2])<<16 | int32(element[3])<<24
 			vv := reflect.ValueOf(element)
-			reflect.Append(v, vv)
+			*v = reflect.Append(*v, vv)
+		case 0x11:
+			// timestamp
+			ts := Timestamp(element[0]) | Timestamp(element[1])<<8 | Timestamp(element[2])<<16 | Timestamp(element[3])<<24 | Timestamp(element[4])<<32 | Timestamp(element[5]<<40) | Timestamp(element[6]<<48) | Timestamp(element[7]<<56)
+			vv := reflect.ValueOf(ts)
+			*v = reflect.Append(*v, vv)
+		case 0x12:
+			element := int64(element[0]) | int64(element[1])<<8 | int64(element[2])<<16 | int64(element[3])<<24 | int64(element[4])<<32 | int64(element[5]<<40) | int64(element[6]<<48) | int64(element[7]<<56)
+			vv := reflect.ValueOf(element)
+			*v = reflect.Append(*v, vv)
 		default:
 			return &InvalidBSONTypeError{typ}
 		}
@@ -189,6 +267,20 @@ func (r *reader) Next() bool {
 		}
 		element = rest[:elen]
 		rest = rest[elen:]
+	case 0x07:
+		// object id
+		if len(rest) < 12 {
+			r.err = errors.New("corrupt BSON reading object id")
+			return false
+		}
+		element, rest = rest[:12], rest[12:]
+	case 0x08:
+		// boolean
+		if len(rest) < 1 {
+			r.err = errors.New("corrupt BSON reading boolean")
+			return false
+		}
+		element, rest = rest[:1], rest[1:]
 	case 0x09:
 		// UTC datetime
 		// int64
@@ -199,6 +291,7 @@ func (r *reader) Next() bool {
 		element, rest = rest[:8], rest[8:]
 	case 0x0a:
 		// null
+		element, rest = rest[:0], rest[0:]
 	case 0x0b:
 		// regex
 		if len(rest) < 2 {
@@ -226,6 +319,9 @@ func (r *reader) Next() bool {
 			return false
 		}
 		element, rest = rest[:4], rest[4:]
+	case 0x11:
+		// timestamp
+		fallthrough
 	case 0x12:
 		// int64
 		if len(rest) < 8 {
