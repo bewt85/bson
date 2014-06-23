@@ -11,7 +11,7 @@ import (
 func encode(v interface{}) ([]byte, error) {
 	rv := reflect.ValueOf(v)
 	if rv.IsNil() {
-		return nil, &MarshalerError{Type: rv.Type(), Err: errors.New("was nil")}
+		return nil, errors.New("bson: error calling MarshalJSON for type " + rv.Type().String() + ": was nil")
 	}
 	if rv.Kind() == reflect.Ptr {
 		rv = rv.Elem()
@@ -22,16 +22,7 @@ func encode(v interface{}) ([]byte, error) {
 		_, err := w.writeMap(rv)
 		return w.bson, err
 	}
-	return nil, &MarshalerError{Type: rv.Type(), Err: errors.New("unsupported")}
-}
-
-type MarshalerError struct {
-	Type reflect.Type
-	Err  error
-}
-
-func (e *MarshalerError) Error() string {
-	return "json: error calling MarshalJSON for type " + e.Type.String() + ": " + e.Err.Error()
+	return nil, errors.New("bson: error calling MarshalJSON for type " + rv.Type().String() + ": unsupported")
 }
 
 // writer writes formatted BSON objects.
@@ -70,52 +61,58 @@ func (w *writer) writeValue(ename string, v reflect.Value) (int, error) {
 		count += w.writeCstring(ename)
 		return count, nil
 	}
-	switch v := v.Elem(); v.Kind() {
-	case reflect.Float64:
-		count += w.writeType(0x01)
-		count += w.writeCstring(ename)
-		count += w.writeFloat64(v.Float())
-	case reflect.String:
-		count += w.writeType(0x02)
-		count += w.writeCstring(ename)
-		s := v.String()
-		sz := len(s) + 1
-		count += w.writeInt32(int32(sz))
-		w.bson = append(w.bson, s...)
-		w.bson = append(w.bson, 0)
-		count += sz
-	case reflect.Bool:
-		count += w.writeType(0x08)
-		count += w.writeCstring(ename)
-		count += w.writeBool(v.Bool())
-	case reflect.Int32:
-		count += w.writeType(0x10)
-		count += w.writeCstring(ename)
-		count += w.writeInt32(int32(v.Int()))
-	case reflect.Int64:
-		count += w.writeType(0x12)
-		count += w.writeCstring(ename)
-		count += w.writeInt64(int64(v.Int()))
-	case reflect.Slice:
-		// slices encoded as arrays
-		count += w.writeType(0x04)
-		count += w.writeCstring(ename)
-		n, err := w.writeSlice(v)
-		if err != nil {
-			return 0, err
-		}
-		count += n
-	case reflect.Map:
-		// maps encoded as documents
-		count += w.writeType(0x03)
-		count += w.writeCstring(ename)
-		n, err := w.writeMap(v)
-		if err != nil {
-			return 0, err
-		}
-		count += n
+	switch vv := v.Interface().(type) {
+	case ObjectId:
+		count += w.writeType(0x07)
+		count += w.writeBytes(vv[:])
 	default:
-		return 0, &UnsupportedTypeError{v.Type()}
+		switch v := v.Elem(); v.Kind() {
+		case reflect.Float64:
+			count += w.writeType(0x01)
+			count += w.writeCstring(ename)
+			count += w.writeFloat64(v.Float())
+		case reflect.String:
+			count += w.writeType(0x02)
+			count += w.writeCstring(ename)
+			s := v.String()
+			sz := len(s) + 1
+			count += w.writeInt32(int32(sz))
+			w.bson = append(w.bson, s...)
+			w.bson = append(w.bson, 0)
+			count += sz
+		case reflect.Bool:
+			count += w.writeType(0x08)
+			count += w.writeCstring(ename)
+			count += w.writeBool(v.Bool())
+		case reflect.Int32:
+			count += w.writeType(0x10)
+			count += w.writeCstring(ename)
+			count += w.writeInt32(int32(v.Int()))
+		case reflect.Int64:
+			count += w.writeType(0x12)
+			count += w.writeCstring(ename)
+			count += w.writeInt64(int64(v.Int()))
+		case reflect.Slice:
+			// slices encoded as arrays
+			count += w.writeType(0x04)
+			count += w.writeCstring(ename)
+			n, err := w.writeSlice(v)
+			if err != nil {
+				return 0, err
+			}
+			count += n
+		case reflect.Map:
+			// maps encoded as documents
+			count += w.writeType(0x03)
+			count += w.writeCstring(ename)
+			n, err := w.writeMap(v)
+			if err != nil {
+				return 0, err
+			}
+			count += n
+		default:
+			return 0, errors.New("bson: unsupported type: " + v.Type().String())
+		}
 	}
 	return count, nil
 }
@@ -155,6 +152,11 @@ func (w *writer) writeBool(b bool) int {
 	return 1
 }
 
+func (w *writer) writeBytes(b []byte) int {
+	w.bson = append(w.bson, b...)
+	return len(b)
+}
+
 func (w *writer) writeCstring(s string) int {
 	w.bson = append(w.bson, s...)
 	w.bson = append(w.bson, 0)
@@ -177,14 +179,4 @@ func (w *writer) writeFloat64(f float64) int {
 	w.bson = append(w.bson, byte(v), byte(v>>8), byte(v>>16), byte(v>>24),
 		byte(v>>32), byte(v>>40), byte(v>>48), byte(v>>56))
 	return sizeofInt64
-}
-
-// An UnsupportedTypeError is returned by Marshal when attempting
-// to encode an unsupported value type.
-type UnsupportedTypeError struct {
-	Type reflect.Type
-}
-
-func (e *UnsupportedTypeError) Error() string {
-	return "json: unsupported type: " + e.Type.String()
 }

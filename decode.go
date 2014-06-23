@@ -8,27 +8,14 @@ import (
 	"reflect"
 )
 
-// An InvalidUnmarshalError describes an invalid argument passed to Unmarshal.
-// (The argument to Unmarshal must be a non-nil pointer.)
-type InvalidUnmarshalError struct {
-	Type reflect.Type
-}
-
-func (e *InvalidUnmarshalError) Error() string {
-	if e.Type == nil {
-		return "bson: Unmarshal(nil)"
-	}
-	if e.Type.Kind() != reflect.Ptr {
-		return "bson: Unmarshal(non-pointer " + e.Type.String() + ")"
-	}
-	return "bson: Unmarshal(nil " + e.Type.String() + ")"
-}
-
 // decode decodes data into v according to the rules detailed in Unmarshal.
 func decode(data []byte, v interface{}) error {
 	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		return &InvalidUnmarshalError{reflect.TypeOf(v)}
+	if rv.Kind() != reflect.Ptr {
+		return errors.New("bson: Unmarshal(non-pointer " + rv.Type().String() + ")")
+	}
+	if rv.IsNil() {
+		return errors.New("bson: Unmarshal(nil " + rv.Type().String() + ")")
 	}
 	switch rv := rv.Elem(); rv.Kind() {
 	case reflect.Struct:
@@ -36,14 +23,77 @@ func decode(data []byte, v interface{}) error {
 	case reflect.Map:
 		return decodeMap(data, rv)
 	default:
-		return &InvalidUnmarshalError{rv.Type()}
+		return errors.New("bson: Unmarshal(pointer " + rv.Type().String() + ")")
 	}
 }
 
 func decodeStruct(data []byte, v reflect.Value) error {
 	iter := reader{bson: data[4 : len(data)-1]}
 	for iter.Next() {
-
+		typ, ename, element := iter.Element()
+		v := v.FieldByName(string(trimlast(ename)))
+		if !v.IsValid() {
+			// can't match the field, skip it
+			continue
+		}
+		switch typ {
+		case 0x01:
+			// double
+			bits := uint64(element[0]) | uint64(element[1])<<8 | uint64(element[2])<<16 | uint64(element[3])<<24 | uint64(element[4])<<32 | uint64(element[5]<<40) | uint64(element[6]<<48) | uint64(element[7]<<56)
+			vv := reflect.ValueOf(math.Float64frombits(bits))
+			v.Set(vv)
+		case 0x02:
+			// utf-8 string
+			vv := reflect.ValueOf(string(trimlast(element)))
+			v.Set(vv)
+		case 0x03:
+			// BSON document (map)
+			m := make(map[string]interface{})
+			vv := reflect.ValueOf(m)
+			if err := decodeMap(element, vv); err != nil {
+				return err
+			}
+			v.Set(vv)
+		case 0x04:
+			// array
+			s := make([]interface{}, 0)
+			if err := decodeSlice(element, &s); err != nil {
+				return err
+			}
+			vv := reflect.ValueOf(s)
+			v.Set(vv)
+		case 0x07:
+			// object id
+			var oid ObjectId
+			copy(oid[:], element)
+			vv := reflect.ValueOf(oid)
+			v.Set(vv)
+		case 0x08:
+			// boolean
+			b := element[0] == 1
+			vv := reflect.ValueOf(b)
+			v.Set(vv)
+		case 0x09:
+			// datetime
+			dt := Datetime(element[0]) | Datetime(element[1])<<8 | Datetime(element[2])<<16 | Datetime(element[3])<<24 | Datetime(element[4])<<32 | Datetime(element[5]<<40) | Datetime(element[6]<<48) | Datetime(element[7]<<56)
+			vv := reflect.ValueOf(dt)
+			v.Set(vv)
+		case 0x10:
+			element := int32(element[0]) | int32(element[1])<<8 | int32(element[2])<<16 | int32(element[3])<<24
+			vv := reflect.ValueOf(element)
+			v.Set(vv)
+		case 0x11:
+			// timestamp
+			ts := Timestamp(element[0]) | Timestamp(element[1])<<8 | Timestamp(element[2])<<16 | Timestamp(element[3])<<24 | Timestamp(element[4])<<32 | Timestamp(element[5]<<40) | Timestamp(element[6]<<48) | Timestamp(element[7]<<56)
+			vv := reflect.ValueOf(ts)
+			v.Set(vv)
+		case 0x12:
+			element := int64(element[0]) | int64(element[1])<<8 | int64(element[2])<<16 | int64(element[3])<<24 | int64(element[4])<<32 | int64(element[5]<<40) | int64(element[6]<<48) | int64(element[7]<<56)
+			vv := reflect.ValueOf(element)
+			v.Set(vv)
+		default:
+			return fmt.Errorf("bson: unknown element type %x", typ)
+		}
 	}
 	return iter.Err()
 }
@@ -74,10 +124,10 @@ func decodeMap(data []byte, v reflect.Value) error {
 		case 0x04:
 			// array
 			s := make([]interface{}, 0)
-			vv := reflect.ValueOf(s)
-			if err := decodeSlice(element, &vv); err != nil {
+			if err := decodeSlice(element, &s); err != nil {
 				return err
 			}
+			vv := reflect.ValueOf(s)
 			v.SetMapIndex(kv, vv)
 		case 0x07:
 			// object id
@@ -116,13 +166,13 @@ func decodeMap(data []byte, v reflect.Value) error {
 			vv := reflect.ValueOf(element)
 			v.SetMapIndex(kv, vv)
 		default:
-			return &InvalidBSONTypeError{typ}
+			return fmt.Errorf("bson: unknown element type %x", typ)
 		}
 	}
 	return iter.Err()
 }
 
-func decodeSlice(data []byte, v *reflect.Value) error {
+func decodeSlice(data []byte, v *[]interface{}) error {
 	iter := reader{bson: data[4 : len(data)-1]}
 	for iter.Next() {
 		typ, _, element := iter.Element()
@@ -130,12 +180,10 @@ func decodeSlice(data []byte, v *reflect.Value) error {
 		case 0x01:
 			// double
 			bits := uint64(element[0]) | uint64(element[1])<<8 | uint64(element[2])<<16 | uint64(element[3])<<24 | uint64(element[4])<<32 | uint64(element[5]<<40) | uint64(element[6]<<48) | uint64(element[7]<<56)
-			vv := reflect.ValueOf(math.Float64frombits(bits))
-			*v = reflect.Append(*v, vv)
+			*v = append(*v, bits)
 		case 0x02:
 			// utf-8 string
-			vv := reflect.ValueOf(string(trimlast(element)))
-			*v = reflect.Append(*v, vv)
+			*v = append(*v, string(trimlast(element)))
 		case 0x03:
 			// BSON document (map)
 			m := make(map[string]interface{})
@@ -143,49 +191,42 @@ func decodeSlice(data []byte, v *reflect.Value) error {
 			if err := decodeMap(element, vv); err != nil {
 				return err
 			}
-			*v = reflect.Append(*v, vv)
+			*v = append(*v, m)
 		case 0x04:
 			// array
 			s := make([]interface{}, 0)
-			vv := reflect.ValueOf(s)
-			if err := decodeSlice(element, &vv); err != nil {
+			if err := decodeSlice(element, &s); err != nil {
 				return err
 			}
-			*v = reflect.Append(*v, vv)
+			*v = append(*v, s)
 		case 0x07:
 			// object id
 			var oid ObjectId
 			copy(oid[:], element)
-			vv := reflect.ValueOf(oid)
-			*v = reflect.Append(*v, vv)
+			*v = append(*v, oid)
 		case 0x08:
 			// boolean
 			b := element[0] == 1
-			vv := reflect.ValueOf(b)
-			*v = reflect.Append(*v, vv)
+			*v = append(*v, b)
 		case 0x09:
 			// datetime
 			dt := Datetime(element[0]) | Datetime(element[1])<<8 | Datetime(element[2])<<16 | Datetime(element[3])<<24 | Datetime(element[4])<<32 | Datetime(element[5]<<40) | Datetime(element[6]<<48) | Datetime(element[7]<<56)
-			vv := reflect.ValueOf(dt)
-			*v = reflect.Append(*v, vv)
+			*v = append(*v, dt)
 		case 0x0a:
 			// null
-			*v = reflect.Append(*v, reflect.ValueOf(nil))
+			*v = append(*v, nil)
 		case 0x10:
 			element := int32(element[0]) | int32(element[1])<<8 | int32(element[2])<<16 | int32(element[3])<<24
-			vv := reflect.ValueOf(element)
-			*v = reflect.Append(*v, vv)
+			*v = append(*v, element)
 		case 0x11:
 			// timestamp
 			ts := Timestamp(element[0]) | Timestamp(element[1])<<8 | Timestamp(element[2])<<16 | Timestamp(element[3])<<24 | Timestamp(element[4])<<32 | Timestamp(element[5]<<40) | Timestamp(element[6]<<48) | Timestamp(element[7]<<56)
-			vv := reflect.ValueOf(ts)
-			*v = reflect.Append(*v, vv)
+			*v = append(*v, ts)
 		case 0x12:
 			element := int64(element[0]) | int64(element[1])<<8 | int64(element[2])<<16 | int64(element[3])<<24 | int64(element[4])<<32 | int64(element[5]<<40) | int64(element[6]<<48) | int64(element[7]<<56)
-			vv := reflect.ValueOf(element)
-			*v = reflect.Append(*v, vv)
+			*v = append(*v, element)
 		default:
-			return &InvalidBSONTypeError{typ}
+			return fmt.Errorf("bson: unknown element type %x", typ)
 		}
 	}
 	return iter.Err()
@@ -333,7 +374,7 @@ func (r *reader) Next() bool {
 		}
 		element, rest = rest[:8], rest[8:]
 	default:
-		r.err = &InvalidBSONTypeError{typ}
+		r.err = fmt.Errorf("bson: unknown element type %x", typ)
 		return false
 	}
 	r.bson, r.ename, r.element = rest, ename, element
@@ -348,15 +389,6 @@ func (r *reader) Err() error {
 // Element returns the most recent element read by a call to Next.
 func (r *reader) Element() (byte, []byte, []byte) {
 	return r.ename[0], r.ename[1:], r.element
-}
-
-// An InvalidBSONTypeError describes an unhandled BSON document element type.
-type InvalidBSONTypeError struct {
-	Type byte
-}
-
-func (e *InvalidBSONTypeError) Error() string {
-	return fmt.Sprintf("bson: unknown element type %x", e.Type)
 }
 
 // readInt32 returns the value of the first 4 bytes of buf as a little endian

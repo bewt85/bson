@@ -140,7 +140,7 @@ var libbsonTests = []string{
 	"test13.bson", // array[bool]
 	"test14.bson", // array[string]
 	// "test15.bson", // array[datetime]
-	// "test16.bson",
+	"test16.bson",
 	// "test17.bson", // objectid
 	"test18.bson", // map[nil]
 	"test19.bson",
@@ -186,7 +186,7 @@ func TestLibBSONTestdata(t *testing.T) {
 		var out bytes.Buffer
 		e := NewEncoder(&out)
 		if err := e.Encode(v); err != nil {
-			t.Errorf("Encode", f, err)
+			t.Errorf("Encode: %s: %v", f, err)
 			continue
 		}
 		if got := out.Bytes(); !reflect.DeepEqual(want, got) {
