@@ -40,12 +40,10 @@ func decodeStruct(data []byte, v reflect.Value) error {
 		case 0x01:
 			// double
 			bits := uint64(element[0]) | uint64(element[1])<<8 | uint64(element[2])<<16 | uint64(element[3])<<24 | uint64(element[4])<<32 | uint64(element[5]<<40) | uint64(element[6]<<48) | uint64(element[7]<<56)
-			vv := reflect.ValueOf(math.Float64frombits(bits))
-			v.Set(vv)
+			v.SetFloat(math.Float64frombits(bits))
 		case 0x02:
 			// utf-8 string
-			vv := reflect.ValueOf(string(trimlast(element)))
-			v.Set(vv)
+			v.SetString(string(trimlast(element)))
 		case 0x03:
 			// BSON document (map)
 			m := make(map[string]interface{})
@@ -70,18 +68,15 @@ func decodeStruct(data []byte, v reflect.Value) error {
 			v.Set(vv)
 		case 0x08:
 			// boolean
-			b := element[0] == 1
-			vv := reflect.ValueOf(b)
-			v.Set(vv)
+			v.SetBool(element[0] == 1)
 		case 0x09:
 			// datetime
 			dt := Datetime(element[0]) | Datetime(element[1])<<8 | Datetime(element[2])<<16 | Datetime(element[3])<<24 | Datetime(element[4])<<32 | Datetime(element[5]<<40) | Datetime(element[6]<<48) | Datetime(element[7]<<56)
 			vv := reflect.ValueOf(dt)
 			v.Set(vv)
 		case 0x10:
-			element := int32(element[0]) | int32(element[1])<<8 | int32(element[2])<<16 | int32(element[3])<<24
-			vv := reflect.ValueOf(element)
-			v.Set(vv)
+			element := int64(element[0]) | int64(element[1])<<8 | int64(element[2])<<16 | int64(element[3])<<24
+			v.SetInt(element)
 		case 0x11:
 			// timestamp
 			ts := Timestamp(element[0]) | Timestamp(element[1])<<8 | Timestamp(element[2])<<16 | Timestamp(element[3])<<24 | Timestamp(element[4])<<32 | Timestamp(element[5]<<40) | Timestamp(element[6]<<48) | Timestamp(element[7]<<56)
@@ -89,8 +84,7 @@ func decodeStruct(data []byte, v reflect.Value) error {
 			v.Set(vv)
 		case 0x12:
 			element := int64(element[0]) | int64(element[1])<<8 | int64(element[2])<<16 | int64(element[3])<<24 | int64(element[4])<<32 | int64(element[5]<<40) | int64(element[6]<<48) | int64(element[7]<<56)
-			vv := reflect.ValueOf(element)
-			v.Set(vv)
+			v.SetInt(element)
 		default:
 			return fmt.Errorf("bson: unknown element type %x", typ)
 		}

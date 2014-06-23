@@ -128,7 +128,7 @@ var libbsonTests = []string{
 	"test1.bson",
 	"test2.bson",
 	// "test3.bson", // double
-	//"test4.bson", // timestamp
+	// "test4.bson", // timestamp
 	"test5.bson",
 	"test6.bson",
 	// "test7.bson", // []double
@@ -149,12 +149,12 @@ var libbsonTests = []string{
 	"test23.bson",
 	// "test24.bson", // binary data
 	//"test25.bson", "test32.bson" // deprecated
-	//"test26.bson", // datatime
+	// "test26.bson", // datatime
 	// "test27.bson", // regex
 	// "test28.bson", // db pointer
 	// "test29.bson", "test30.bson", // javascript
 	// "test31.bson", // javascript w/scope
-	//"test33.bson",
+	// "test33.bson",
 	// "test34.bson", // one byte short ...
 	// "test35.bson", // timestamp
 	// "test36.bson", // MinKey
@@ -162,8 +162,8 @@ var libbsonTests = []string{
 	"test38.bson",
 	"test39.bson",
 	"dollarquery.bson",
-	// "dotquery.bson",
-	// "dotkey.bson",
+	"dotquery.bson",
+	"dotkey.bson",
 	// "stackoverflow.bson",
 	"test56.bson",
 	"readergrow.bson",
@@ -190,7 +190,7 @@ func TestLibBSONTestdata(t *testing.T) {
 			continue
 		}
 		if got := out.Bytes(); !reflect.DeepEqual(want, got) {
-			t.Errorf("%s: want %q, got %q", f, want, got)
+			t.Errorf("%s:\nwant %q\n got %q", f, want, got)
 			t.Errorf("bson: %# x, %#v", want, v)
 		}
 	}

@@ -64,7 +64,16 @@ func (w *writer) writeValue(ename string, v reflect.Value) (int, error) {
 	switch vv := v.Interface().(type) {
 	case ObjectId:
 		count += w.writeType(0x07)
+		count += w.writeCstring(ename)
 		count += w.writeBytes(vv[:])
+	case Datetime:
+		count += w.writeType(0x09)
+		count += w.writeCstring(ename)
+		count += w.writeInt64(int64(vv))
+	case Timestamp:
+		count += w.writeType(0x11)
+		count += w.writeCstring(ename)
+		count += w.writeInt64(int64(vv))
 	default:
 		switch v := v.Elem(); v.Kind() {
 		case reflect.Float64:
