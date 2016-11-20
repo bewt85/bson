@@ -3,7 +3,7 @@
     import "github.com/pkg/bson"
 
 Package bson implements encoding and decoding of BSON objects as defined
-at a href="http://bsonspec.org/spec.html">http://bsonspec.org/spec.html</a>. The mapping between BSON objects and Go
+at <a href="http://bsonspec.org/spec.html">http://bsonspec.org/spec.html</a>. The mapping between BSON objects and Go
 values is described in the documentation for the Marshal and Unmarshal functions.
 
 
